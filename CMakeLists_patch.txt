@@ -1,0 +1,65 @@
+# =====================================================================
+#  CMakeLists.txt 补丁 — DVR 页面追加项
+#
+#  在 application/lvgl/lvgl_app/CMakeLists.txt 的 SET(SOURCES ...) 块中，
+#  在 "screens/ui_Home.c" 行之后追加以下三行：
+# =====================================================================
+#
+#  --- a/lvgl/lvgl_app/CMakeLists.txt
+#  +++ b/lvgl/lvgl_app/CMakeLists.txt
+#  @@ SET(SOURCES 块内，screens/ui_Home.c 之后 @@
+#       screens/ui_Home.c
+#  +    screens/dvr_view.c
+#  +    screens/dvr_page.c
+#
+#  @@ images/ 块末尾追加（共46个图片C文件）@@
+#  +    images/ui_img_dvr_bg_png.c
+#  +    images/ui_img_dvr_list_bg_png.c
+#  +    images/ui_img_dvr_icon_png.c
+#  +    images/ui_img_dvr_loading_0_png.c
+#  +    images/ui_img_dvr_loading_1_png.c
+#  +    images/ui_img_dvr_loading_2_png.c
+#  +    images/ui_img_dvr_loading_3_png.c
+#  +    images/ui_img_dvr_loading_4_png.c
+#  +    images/ui_img_dvr_loading_5_png.c
+#  +    images/ui_img_dvr_loading_6_png.c
+#  +    images/ui_img_dvr_loading_7_png.c
+#  +    images/ui_img_dock_bg_png.c
+#  +    images/ui_img_dock_selected_png.c
+#  +    images/ui_img_line_png.c
+#  +    images/ui_img_icon_camera_n_png.c
+#  +    images/ui_img_icon_camera_p_png.c
+#  +    images/ui_img_icon_playback_n_png.c
+#  +    images/ui_img_icon_playback_p_png.c
+#  +    images/ui_img_icon_photo_n_png.c
+#  +    images/ui_img_icon_photo_p_png.c
+#  +    images/ui_img_icon_settings_n_png.c
+#  +    images/ui_img_icon_settings_p_png.c
+#  +    images/ui_img_icon_view_n_png.c
+#  +    images/ui_img_icon_view_p_png.c
+#  +    images/ui_img_icon_delete_n_png.c
+#  +    images/ui_img_icon_delete_p_png.c
+#  +    images/ui_img_list_bg_n_png.c
+#  +    images/ui_img_list_bg_p_png.c
+#  +    images/ui_img_list_icon_video_n_png.c
+#  +    images/ui_img_list_icon_video_p_png.c
+#  +    images/ui_img_list_icon_img_n_png.c
+#  +    images/ui_img_list_icon_img_p_png.c
+#  +    images/ui_img_pop_up_bg_png.c
+#  +    images/ui_img_pop_up_btn_n_png.c
+#  +    images/ui_img_pop_up_btn_p_png.c
+#  +    images/ui_img_settings_btn1_n_png.c
+#  +    images/ui_img_settings_btn1_p_png.c
+#  +    images/ui_img_settings_btn2_n_png.c
+#  +    images/ui_img_settings_btn2_p_png.c
+#  +    images/ui_img_settings_btn2w_n_png.c
+#  +    images/ui_img_settings_btn2w_p_png.c
+#  +    images/ui_img_settings_btn3_n_png.c
+#  +    images/ui_img_settings_btn3_p_png.c
+#  +    images/ui_img_settings_s_png.c
+#  +    images/ui_img_storage_n_png.c
+#  +    images/ui_img_storage_p_png.c
+#
+#  @@ ui.h 中追加 @@
+#  +#include "screens/dvr_page.h"
+#  +#include "images/dvr_images.h"

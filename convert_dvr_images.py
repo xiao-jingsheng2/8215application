@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+convert_dvr_images.py — Convert AWTK DVR PNG images to LVGL 9.x C arrays.
+
+Usage (run from your application root):
+    python3 convert_dvr_images.py \
+        /home/dylan/Desktop/0520/AMT630HV100/amt630hV100-sdk-beta-20250625/amt630hv100-freertos/app/hcn/ui/HCN_DC001/design/default/images/xx \
+        /home/dylan/Desktop/0520/0922/application/lvgl/lvgl_app/images
+
+Output: one C file per PNG in the output directory, following the project's
+        existing naming convention (ui_img_<name>_png.c) and LVGL 9.x descriptor.
+"""
+
+import os
+import sys
+import re
+from PIL import Image
+
+# All DVR-related images (name as in AWTK resource, filename on disk)
+DVR_IMAGES = [
+    # DVR-specific
+    "dvr_bg", "dvr_list_bg", "DVR_icon",
+    "dvr_loading_0", "dvr_loading_1", "dvr_loading_2", "dvr_loading_3",
+    "dvr_loading_4", "dvr_loading_5", "dvr_loading_6", "dvr_loading_7",
+    # Dock bar (shared but needed by DVR page)
+    "dock_bg", "dock_selected", "line",
+    # Dock button icons
+    "icon_camera_n", "icon_camera_p",
+    "icon_playback_n", "icon_playback_p",
+    "icon_photo_n", "icon_photo_p",
+    "icon_settings_n", "icon_settings_p",
+    # File list icons
+    "icon_view_n", "icon_view_p",
+    "icon_delete_n", "icon_delete_p",
+    "list_bg_n", "list_bg_p",
+    "list_icon_video_n", "list_icon_video_p",
+    "list_icon_img_n", "list_icon_img_p",
+    # Popup
+    "pop up_bg", "pop up_btn_n", "pop up_btn_p",
+    # Settings row buttons
+    "settings_btn1_n", "settings_btn1_p",
+    "settings_btn2_n", "settings_btn2_p",
+    "settings_btn2w_n", "settings_btn2w_p",
+    "settings_btn3_n", "settings_btn3_p",
+    "settings_s",
+    # Storage bar
+    "storage_n", "storage_p",
+]
+
+
+def sanitize_name(name: str) -> str:
+    """Convert image name to valid C identifier: lowercase, spaces→_, strip specials."""
+    s = name.lower().replace(" ", "_").replace("-", "_")
+    s = re.sub(r'[^a-z0-9_]', '', s)
+    return s
+
+
+def convert_one(png_path: str, c_name: str, out_dir: str):
+    """Convert a single PNG to an LVGL C array file."""
+    im = Image.open(png_path).convert("RGBA")
+    w, h = im.size
+    pixels = im.tobytes()  # R,G,B,A per pixel
+
+    data_name = f"ui_img_{c_name}_png_data"
+    desc_name = f"ui_img_{c_name}_png"
+    out_file = os.path.join(out_dir, f"ui_img_{c_name}_png.c")
+
+    with open(out_file, "w") as f:
+        f.write(f"// Auto-generated from {os.path.basename(png_path)} by convert_dvr_images.py\n")
+        f.write(f"// LVGL version: 9.2.2   Image: {w}x{h} ARGB8888\n\n")
+        f.write('#include "../ui.h"\n\n')
+        f.write("#ifndef LV_ATTRIBUTE_MEM_ALIGN\n")
+        f.write("    #define LV_ATTRIBUTE_MEM_ALIGN\n")
+        f.write("#endif\n\n")
+        f.write(f"// IMAGE DATA: {os.path.basename(png_path)}\n")
+        f.write(f"const LV_ATTRIBUTE_MEM_ALIGN uint8_t {data_name}[] = {{\n")
+
+        # Write pixel data, 16 pixels per line (64 bytes)
+        COLS = 16
+        total = len(pixels)
+        for row_start in range(0, total, COLS * 4):
+            chunk = pixels[row_start:row_start + COLS * 4]
+            hexvals = ",".join(f"0x{b:02X}" for b in chunk)
+            comma = "," if row_start + COLS * 4 < total else ""
+            f.write(f"    {hexvals}{comma}\n")
+
+        f.write("};\n\n")
+        f.write(f"const lv_image_dsc_t {desc_name} = {{\n")
+        f.write(f"    .header.w = {w},\n")
+        f.write(f"    .header.h = {h},\n")
+        f.write(f"    .data_size = sizeof({data_name}),\n")
+        f.write(f"    .header.cf = LV_COLOR_FORMAT_NATIVE_WITH_ALPHA,\n")
+        f.write(f"    .header.magic = LV_IMAGE_HEADER_MAGIC,\n")
+        f.write(f"    .data = {data_name}\n")
+        f.write("};\n")
+
+    print(f"  [OK] {out_file}  ({w}x{h}, {total} bytes)")
+
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: python3 convert_dvr_images.py <awtk_images_dir> <lvgl_output_dir>")
+        print("  awtk_images_dir: .../HCN_DC001/design/default/images/xx")
+        print("  lvgl_output_dir: .../application/lvgl/lvgl_app/images")
+        sys.exit(1)
+
+    src_dir = sys.argv[1]
+    out_dir = sys.argv[2]
+
+    if not os.path.isdir(src_dir):
+        print(f"ERROR: source directory not found: {src_dir}")
+        sys.exit(1)
+    os.makedirs(out_dir, exist_ok=True)
+
+    converted = 0
+    skipped = []
+
+    for name in DVR_IMAGES:
+        png_path = os.path.join(src_dir, name + ".png")
+        if not os.path.exists(png_path):
+            skipped.append(name)
+            continue
+        c_name = sanitize_name(name)
+        convert_one(png_path, c_name, out_dir)
+        converted += 1
+
+    print(f"\nDone: {converted} images converted, {len(skipped)} skipped.")
+    if skipped:
+        print(f"Skipped (not found): {', '.join(skipped)}")
+
+    # Generate declarations header
+    hdr_path = os.path.join(out_dir, "dvr_images.h")
+    with open(hdr_path, "w") as f:
+        f.write("/* dvr_images.h — LV_IMG_DECLARE for all DVR image assets */\n")
+        f.write("/* Auto-generated by convert_dvr_images.py */\n\n")
+        f.write("#ifndef DVR_IMAGES_H\n#define DVR_IMAGES_H\n\n")
+        f.write('#include "lvgl/lvgl.h"\n\n')
+        for name in DVR_IMAGES:
+            png_path = os.path.join(src_dir, name + ".png")
+            if os.path.exists(png_path):
+                c_name = sanitize_name(name)
+                f.write(f"LV_IMG_DECLARE(ui_img_{c_name}_png);\n")
+        f.write("\n#endif /* DVR_IMAGES_H */\n")
+    print(f"  [OK] {hdr_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -27,6 +27,7 @@ extern "C" {
 ///////////////////// SCREENS ////////////////////
 
 #include "screens/ui_Home.h"
+#include "screens/dvr_page.h"
 
 /* MVVM lvgl View（HCN_APP_FULL 模式）：车辆数据面板挂接在 Home 屏 */
 #ifdef HCN_APP_FULL
@@ -51,6 +52,9 @@ LV_IMG_DECLARE(ui_img_music_png);    // assets/music.png
 LV_IMG_DECLARE(ui_img_picture_png);  // assets/picture.png
 LV_IMG_DECLARE(ui_img_setting_png);    // assets/setting.png
 LV_IMG_DECLARE(ui_img_btcall_png);    // assets/btcall.png
+
+// DVR image assets
+#include "images/dvr_images.h"
 
 // UI INIT
 void ui_init(void);
