@@ -1,0 +1,56 @@
+#!/bin/sh
+
+DAEMON="$(which hcn_application)"
+DESC="hcn_application"
+TAG="hcn_application"
+
+pr_info() {
+    echo "[$TAG] $@"
+    logger -p info -t $TAG "$@"
+}
+
+pr_err() {
+    echo "[$TAG] $@"
+    logger -p info -t $TAG "$@"
+}
+
+usage() {
+    pr_info "Usage: $0 <start|stop>"
+}
+
+start() {
+    pr_info "Starting $DESC..."
+    #modprobe gt9xx.ko
+	echo "hcn_application start" > /proc/bootprof
+	/usr/bin/hcn_application &
+	sleep 1
+	echo "hcn_application end" > /proc/bootprof
+}
+
+stop() {
+    pr_info "Stopping $DESC..."
+    start-stop-daemon --stop --exec $DAEMON
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        pr_info "$DESC stopped successfully."
+    else
+        pr_err "Failed to stop $DESC. Error code: $ret."
+    fi
+
+    return $ret
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
+
+exit $?
