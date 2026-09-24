@@ -1,47 +1,16 @@
-/*
- * dvr_view.c — DVR UI state machine (LVGL 9.x port)
- *
- * Ported from AWTK dvr_view.c (dc002-0617 branch, AMT630HV100).
- * Layout replaces dvr_page.xml; state machine logic is 1:1 equivalent.
- *
- * Target: lvgl/lvgl_app/screens/dvr_view.c
- * Source: HCN_DC001/src/view/home_view/dvr_view.c (826 lines)
- *         HCN_DC001/design/default/ui/dvr_page.xml
- *
- * AWTK→LVGL mapping applied:
- *   widget_t*                    → lv_obj_t*
- *   widget_set_visible(w,T/F)   → lv_obj_remove/add_flag(w, LV_OBJ_FLAG_HIDDEN)
- *   widget_set_text_utf8(w,s)   → lv_label_set_text(w, s)
- *   widget_set_state(w,"sel")   → lv_obj_add_state(w, LV_STATE_CHECKED)
- *   widget_move(w,x,y)          → lv_obj_set_pos(w, x, y)
- *   progress_bar_set_value(w,v) → lv_bar_set_value(w, v, LV_ANIM_OFF)
- *   timer_add/remove             → lv_timer_create/delete
- *   widget_lookup(parent,"n",T) → direct pointer (created in build_layout)
- *   widget_set_style_color(...)  → lv_obj_set_style_text_color(...)
- *   widget_set_prop_str(..IMAGE) → lv_image_set_src(w, &img)
- */
-
 #include "dvr_view.h"
 #include "../images/dvr_images.h"
 
-/* dvr_api.h is the same AWTK backend — include unchanged */
 #include "dvr_api.h"
 
-/* Forward declarations */
 static void show_sub(dvr_sub_page_e sub);
 static void del_poll_stop(void);
 static void dvr_request_file_list(void);
 
-/* ================================================================
- * Helper macros: LVGL visibility
- * ================================================================ */
 #define W_SHOW(w)  do { if(w) lv_obj_remove_flag((w), LV_OBJ_FLAG_HIDDEN); } while(0)
 #define W_HIDE(w)  do { if(w) lv_obj_add_flag((w), LV_OBJ_FLAG_HIDDEN); } while(0)
 #define W_VISIBLE(w, vis)  do { if(vis) { W_SHOW(w); } else { W_HIDE(w); } } while(0)
 
-/* ================================================================
- * Widgets (created in build_layout, parallel to AWTK widget_lookup)
- * ================================================================ */
 static lv_obj_t *dvr_main_view    = NULL;
 static lv_obj_t *dvr_idle_view    = NULL;
 static lv_obj_t *dvr_list_view    = NULL;
@@ -70,24 +39,18 @@ static lv_obj_t *storage_text    = NULL;
 static lv_obj_t *popup_loading_w = NULL;
 static lv_obj_t *list_no_sd_label= NULL;
 
-/* Idle view widgets */
 static lv_obj_t *idle_tab_sel    = NULL;
 static lv_obj_t *idle_tab_left   = NULL;
 static lv_obj_t *idle_tab_right  = NULL;
 
-/* Popup sub-widgets */
 static lv_obj_t *popup_title     = NULL;
 static lv_obj_t *popup_confirm_bg= NULL;
 static lv_obj_t *popup_cancel_bg = NULL;
 static lv_obj_t *popup_confirm_lbl=NULL;
 static lv_obj_t *popup_cancel_lbl =NULL;
 
-/* Settings row highlight backgrounds */
 static lv_obj_t *set_row_bg[DVR_SET_ROW_MAX] = {0};
 
-/* ================================================================
- * State (identical to AWTK original)
- * ================================================================ */
 static dvr_sub_page_e cur_sub = DVR_SUB_MAIN;
 static int dock_focus   = DVR_DOCK_PREVIEW;
 static int cam_focus    = DVR_CAM_FRONT;
@@ -132,7 +95,6 @@ static dvr_sub_page_e no_sd_return_sub = DVR_SUB_MAIN;
 
 static inline uint8_t list_api_mode(void) { return (uint8_t)(list_mode * 2 + list_tab); }
 
-/* Loading spinner image table */
 static const lv_image_dsc_t *loading_imgs[8] = {
     &ui_img_dvr_loading_0_png, &ui_img_dvr_loading_1_png,
     &ui_img_dvr_loading_2_png, &ui_img_dvr_loading_3_png,
@@ -140,7 +102,6 @@ static const lv_image_dsc_t *loading_imgs[8] = {
     &ui_img_dvr_loading_6_png, &ui_img_dvr_loading_7_png,
 };
 
-/* Dock button icon tables (normal / selected) */
 static const lv_image_dsc_t *dock_icon_n[DVR_DOCK_BTN_MAX] = {
     &ui_img_icon_camera_n_png, &ui_img_icon_playback_n_png,
     &ui_img_icon_photo_n_png,  &ui_img_icon_settings_n_png,
@@ -150,15 +111,12 @@ static const lv_image_dsc_t *dock_icon_p[DVR_DOCK_BTN_MAX] = {
     &ui_img_icon_photo_p_png,  &ui_img_icon_settings_p_png,
 };
 
-/* ================================================================
- * Visibility control — show_sub (direct port of AWTK show_sub)
- * ================================================================ */
 static void show_sub(dvr_sub_page_e sub)
 {
     dvr_sub_page_e prev = cur_sub;
     cur_sub = sub;
 
-    /* Stop list/del timers when leaving list area */
+
     if ((prev == DVR_SUB_LIST || prev == DVR_SUB_LIST_ACT) &&
         sub != DVR_SUB_LIST && sub != DVR_SUB_LIST_ACT) {
         if (list_poll_timer) {
@@ -169,7 +127,7 @@ static void show_sub(dvr_sub_page_e sub)
         del_poll_stop();
     }
 
-    /* Preview enable/disable */
+
     int pv_prev = (prev == DVR_SUB_MAIN || prev == DVR_SUB_CAM_SW || prev == DVR_SUB_PLAYBACK);
     int pv_next = (sub  == DVR_SUB_MAIN || sub  == DVR_SUB_CAM_SW || sub  == DVR_SUB_PLAYBACK);
     if (pv_prev && !pv_next) {
@@ -177,7 +135,7 @@ static void show_sub(dvr_sub_page_e sub)
         printf("DVR: preview off (sub=%d)\n", sub);
     }
 
-    /* Visibility flags — exact replica of AWTK original */
+
     int mv = (sub == DVR_SUB_MAIN || sub == DVR_SUB_CAM_SW || sub == DVR_SUB_PLAYBACK);
     W_VISIBLE(dvr_main_view,    mv);
     W_VISIBLE(dvr_main_bg,      sub == DVR_SUB_MAIN);
@@ -194,9 +152,6 @@ static void show_sub(dvr_sub_page_e sub)
     }
 }
 
-/* ================================================================
- * Highlight helpers — exact port of AWTK logic
- * ================================================================ */
 static void hl_dock(int i)
 {
     for (int n = 0; n < DVR_DOCK_BTN_MAX; n++) {
@@ -317,9 +272,6 @@ static void hl_popup(int f)
     }
 }
 
-/* ================================================================
- * Loading popup helpers
- * ================================================================ */
 static void popup_show_loading(void)
 {
     if (!dvr_popup_view) return;
@@ -345,9 +297,6 @@ static void show_no_sd_popup(dvr_sub_page_e return_to)
     printf("DVR: no SD card alert\n");
 }
 
-/* ================================================================
- * Loading timer
- * ================================================================ */
 static void loading_stop(void)
 {
     if (loading_timer) { lv_timer_delete(loading_timer); loading_timer = NULL; }
@@ -414,9 +363,6 @@ static void enter_settings(void)
     printf("DVR: enter settings (cache miss, loading started)\n");
 }
 
-/* ================================================================
- * Delete-then-refresh timer
- * ================================================================ */
 static void del_poll_stop(void)
 {
     if (del_poll_timer) { lv_timer_delete(del_poll_timer); del_poll_timer = NULL; }
@@ -470,9 +416,6 @@ static void del_then_refresh(int fi)
     printf("DVR: del fi=%d, UI updated, background verify started\n", fi);
 }
 
-/* ================================================================
- * File list data helpers (identical logic to AWTK original)
- * ================================================================ */
 static void on_filelist_poll_timer(lv_timer_t *t)
 {
     (void)t;
@@ -541,12 +484,6 @@ static uint8_t get_fname(int idx, char *out, int sz)
     return 1;
 }
 
-/* ================================================================
- * Layout builder — programmatic equivalent of dvr_page.xml
- * Screen 1024×600, all panels stacked, visibility-controlled.
- * ================================================================ */
-
-/* Helper: create a positioned image widget inside parent */
 static lv_obj_t *mk_img(lv_obj_t *par, const lv_image_dsc_t *src,
                          int x, int y, int w, int h)
 {
@@ -558,7 +495,6 @@ static lv_obj_t *mk_img(lv_obj_t *par, const lv_image_dsc_t *src,
     return img;
 }
 
-/* Helper: create positioned label */
 static lv_obj_t *mk_label(lv_obj_t *par, const char *txt,
                            int x, int y, int w, int h, int font_sz)
 {
@@ -568,11 +504,10 @@ static lv_obj_t *mk_label(lv_obj_t *par, const char *txt,
     lv_obj_set_size(lbl, w, h);
     lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_remove_flag(lbl, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    (void)font_sz; /* font size applied via project-level style; kept for doc */
+    (void)font_sz;
     return lbl;
 }
 
-/* Helper: create positioned container (replaces AWTK <view>) */
 static lv_obj_t *mk_panel(lv_obj_t *par, int x, int y, int w, int h)
 {
     lv_obj_t *p = lv_obj_create(par);
@@ -585,12 +520,12 @@ static lv_obj_t *mk_panel(lv_obj_t *par, int x, int y, int w, int h)
 
 static void build_layout(lv_obj_t *parent)
 {
-    /* --- dvr_main_view (preview + docks) --- */
+
     dvr_main_view = mk_panel(parent, 0, 0, 1024, 600);
 
     dvr_main_bg = mk_img(dvr_main_view, &ui_img_dvr_bg_png, 0, 0, 1024, 500);
 
-    /* Main dock bar */
+
     dvr_dock_bar = mk_panel(dvr_main_view, 0, 500, 1024, 100);
     mk_img(dvr_dock_bar, &ui_img_dock_bg_png, 0, 0, 1024, 100);
     dock_btn[0] = mk_img(dvr_dock_bar, &ui_img_icon_camera_n_png,   48,  0, 160, 100);
@@ -601,7 +536,7 @@ static void build_layout(lv_obj_t *parent)
     mk_img(dvr_dock_bar, &ui_img_line_png, 768, 0, 1, 100);
     dock_btn[3] = mk_img(dvr_dock_bar, &ui_img_icon_settings_n_png, 816, 0, 160, 100);
 
-    /* Camera sub-dock */
+
     dvr_cam_dock = mk_panel(dvr_main_view, 0, 500, 1024, 100);
     mk_img(dvr_cam_dock, &ui_img_dock_bg_png, 0, 0, 1024, 100);
     dvr_cam_tab_sel = mk_img(dvr_cam_dock, &ui_img_dock_selected_png, 0, 0, 341, 100);
@@ -612,19 +547,19 @@ static void build_layout(lv_obj_t *parent)
     mk_img(dvr_cam_dock, &ui_img_icon_photo_n_png, 812, 10, 80, 80);
     W_HIDE(dvr_cam_dock);
 
-    /* --- dvr_idle_view (after playback back) --- */
+
     dvr_idle_view = mk_panel(parent, 0, 0, 1024, 600);
     mk_img(dvr_idle_view, &ui_img_dvr_bg_png, 0, 0, 1024, 500);
     lv_obj_t *idle_dock = mk_panel(dvr_idle_view, 0, 500, 1024, 100);
     mk_img(idle_dock, &ui_img_dock_bg_png, 0, 0, 1024, 100);
     idle_tab_sel = mk_img(idle_dock, &ui_img_dock_selected_png, 0, 0, 512, 100);
-    lv_obj_set_size(idle_tab_sel, 512, 100); /* stretch to half */
+    lv_obj_set_size(idle_tab_sel, 512, 100);
     mk_img(idle_dock, &ui_img_line_png, 512, 0, 1, 100);
     idle_tab_left  = mk_label(idle_dock, "Front Video", 156, 19, 200, 61, 30);
     idle_tab_right = mk_label(idle_dock, "Rear Video",  668, 19, 200, 61, 30);
     W_HIDE(dvr_idle_view);
 
-    /* --- dvr_list_view (file list) --- */
+
     dvr_list_view = mk_panel(parent, 0, 0, 1024, 600);
     mk_img(dvr_list_view, &ui_img_dvr_list_bg_png, 0, 0, 1024, 600);
 
@@ -645,7 +580,7 @@ static void build_layout(lv_obj_t *parent)
     list_no_sd_label = mk_label(dvr_list_view, "No SD Card", 362, 200, 300, 60, 32);
     W_HIDE(list_no_sd_label);
 
-    /* File list bottom tab bar */
+
     lv_obj_t *list_dock = mk_panel(dvr_list_view, 0, 500, 1024, 100);
     mk_img(list_dock, &ui_img_dock_bg_png, 0, 0, 1024, 100);
     list_tab_sel = mk_img(list_dock, &ui_img_dock_selected_png, 0, 0, 512, 100);
@@ -655,18 +590,18 @@ static void build_layout(lv_obj_t *parent)
     tab_label_right = mk_label(list_dock, "Rear Video",  668, 19, 200, 61, 30);
     W_HIDE(dvr_list_view);
 
-    /* --- dvr_setting_view --- */
+
     dvr_setting_view = mk_panel(parent, 0, 0, 1024, 600);
     mk_img(dvr_setting_view, &ui_img_dvr_list_bg_png, 0, 0, 1024, 600);
 
-    /* Row 0: Version */
+
     lv_obj_t *r0 = mk_panel(dvr_setting_view, 57, 110, 910, 80);
     set_row_bg[0] = mk_img(r0, &ui_img_settings_btn1_n_png, 0, 0, 250, 80);
     mk_img(r0, &ui_img_settings_btn3_n_png, 270, 0, 640, 80);
     mk_label(r0, "Version", 65, 18, 120, 43, 30);
     set_ver_text = mk_label(r0, "--", 310, 18, 560, 43, 28);
 
-    /* Row 1: Loop Time */
+
     lv_obj_t *r1 = mk_panel(dvr_setting_view, 57, 210, 910, 80);
     set_row_bg[1] = mk_img(r1, &ui_img_settings_btn1_n_png, 0, 0, 250, 80);
     mk_img(r1, &ui_img_settings_btn2_n_png, 270, 0, 200, 80);
@@ -678,7 +613,7 @@ static void build_layout(lv_obj_t *parent)
     mk_label(r1, "2 min", 523, 18, 80, 43, 30);
     mk_label(r1, "3 min", 743, 18, 80, 43, 30);
 
-    /* Row 2: Format (SD Format / Factory Reset) */
+
     lv_obj_t *r2 = mk_panel(dvr_setting_view, 57, 310, 910, 80);
     set_row_bg[2] = mk_img(r2, &ui_img_settings_btn1_n_png, 0, 0, 250, 80);
     mk_img(r2, &ui_img_settings_btn2w_n_png, 270, 0, 310, 80);
@@ -688,13 +623,13 @@ static void build_layout(lv_obj_t *parent)
     set_fmt_sel = mk_img(r2, &ui_img_settings_s_png, 285, 28, 24, 24);
     mk_label(r2, "Factory Reset", 670, 18, 170, 43, 28);
 
-    /* Row 3: SD Card capacity */
+
     lv_obj_t *r3 = mk_panel(dvr_setting_view, 57, 410, 910, 80);
     set_row_bg[3] = mk_img(r3, &ui_img_settings_btn1_n_png, 0, 0, 250, 80);
     mk_img(r3, &ui_img_settings_btn3_n_png, 270, 0, 640, 80);
     mk_label(r3, "SD Card", 55, 18, 140, 43, 30);
 
-    /* Storage progress bar */
+
     storage_bar = lv_bar_create(r3);
     lv_obj_set_pos(storage_bar, 300, 30);
     lv_obj_set_size(storage_bar, 360, 20);
@@ -708,7 +643,7 @@ static void build_layout(lv_obj_t *parent)
 
     W_HIDE(dvr_setting_view);
 
-    /* --- dvr_popup_view (centered) --- */
+
     dvr_popup_view = mk_panel(parent, 262, 165, 500, 270);
     mk_img(dvr_popup_view, &ui_img_pop_up_bg_png, 0, 0, 500, 270);
     popup_title = mk_label(dvr_popup_view, "Confirm?", 170, 60, 160, 46, 33);
@@ -721,16 +656,13 @@ static void build_layout(lv_obj_t *parent)
     W_HIDE(dvr_popup_view);
 }
 
-/* ================================================================
- * Public: Init / Destroy
- * ================================================================ */
 int dvr_view_init(lv_obj_t *parent)
 {
     if (!parent) return -1;
 
     build_layout(parent);
 
-    /* Reset state — exact copy of AWTK init */
+
     dock_focus = DVR_DOCK_PREVIEW;
     cam_focus  = DVR_CAM_FRONT;
     list_focus = 0; list_tab = 0; list_mode = 0; list_count = 0; list_offset = 0;
@@ -749,14 +681,9 @@ void dvr_view_destroy(void)
     loading_stop();
     del_poll_stop();
     if (list_poll_timer) { lv_timer_delete(list_poll_timer); list_poll_timer = NULL; }
-    /* Widget tree is deleted when parent screen is deleted by LVGL */
+
 }
 
-/* ================================================================
- * Key handlers — exact 1:1 port of AWTK state machine
- * ================================================================ */
-
-/* ==== SET ==== */
 void dvr_page_deal_key_set(void)
 {
     switch (cur_sub) {
@@ -828,10 +755,10 @@ void dvr_page_deal_key_set(void)
 
     case DVR_SUB_SETTING:
         switch (set_focus) {
-        case DVR_SET_VERSION: break; /* display-only */
+        case DVR_SET_VERSION: break;
         case DVR_SET_LOOP:   set_edit_val = set_loop_val; hl_loop(set_edit_val); show_sub(DVR_SUB_SET_EDIT); break;
         case DVR_SET_FORMAT: set_fmt_focus = DVR_FMT_SD_FORMAT; hl_fmt(set_fmt_focus); show_sub(DVR_SUB_SET_EDIT); break;
-        case DVR_SET_SD_CARD: break; /* display-only */
+        case DVR_SET_SD_CARD: break;
         default: break;
         } break;
 
@@ -902,19 +829,18 @@ void dvr_page_deal_key_set(void)
         printf("DVR: cam select -> list (mode=%d tab=%d)\n", list_mode, list_tab);
         break;
 
-    case DVR_SUB_LOADING: break;  /* ignore keys during loading */
+    case DVR_SUB_LOADING: break;
     default: break;
     }
 }
 
-/* ==== BACK ==== */
 void dvr_page_deal_key_back(void)
 {
     switch (cur_sub) {
     case DVR_SUB_MAIN:
         W_HIDE(dvr_main_view);
         dvr_stop_preview();
-        /* navigator_back() equivalent: caller handles screen transition */
+
         break;
     case DVR_SUB_CAM_SW:
         show_sub(DVR_SUB_MAIN); hl_dock(dock_focus); break;
@@ -963,7 +889,6 @@ void dvr_page_deal_key_back(void)
     }
 }
 
-/* ==== UP ==== */
 void dvr_page_deal_key_up(void)
 {
     switch (cur_sub) {
@@ -994,7 +919,6 @@ void dvr_page_deal_key_up(void)
     }
 }
 
-/* ==== DOWN ==== */
 void dvr_page_deal_key_down(void)
 {
     switch (cur_sub) {
@@ -1027,9 +951,6 @@ void dvr_page_deal_key_down(void)
     }
 }
 
-/* ================================================================
- * Public accessors
- * ================================================================ */
 dvr_sub_page_e dvr_get_current_sub(void) { return cur_sub; }
 void dvr_set_current_sub(dvr_sub_page_e sub) { show_sub(sub); }
 
